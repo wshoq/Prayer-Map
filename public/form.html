@@ -3,43 +3,56 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Where do You pray?</title>
+  <title>The Living Prayer Map — Where do You pray?</title>
   <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
   <div class="container">
     <div class="card">
       <h1>Where do You pray?</h1>
+
       <p class="small">
-        1) Whats your name<br>
-        2) Put here the link of your localization from google maps - use "share your location"<br>
-        3) Choose your Role
+        This form adds a point to <strong>The Living Prayer Map</strong>.<br><br>
+        1) Write your name / place name<br>
+        2) Paste a Google Maps link (use “Share”)<br>
+        3) Choose your role
       </p>
 
-      <form id="f">
-        <label>1) Whats your name</label>
+      <div id="ok" class="small success" style="display:none; margin-bottom:10px;">
+        ✅ Submitted! Your pin should appear on the map within ~15 seconds.
+      </div>
+
+      <!-- Fallback: nawet bez JS zapisze (POST) -->
+      <form id="f" method="post" action="/submit">
+        <label>1) What’s your name / place name</label>
         <input name="name" required placeholder="Your name / place name" />
 
-        <label>2) Google map link</label>
+        <label>2) Google Maps link</label>
         <input name="link" required placeholder="https://maps.app.goo.gl/..." />
 
         <label>3) Role</label>
         <select name="role" required>
           <option value="" disabled selected>Select role…</option>
-          <option value="RED PINS">RED PINS - If you bleed: offer. For women whose blood becomes prayer in the soil.</option>
-          <option value="BLACK PINS">BLACK PINS - If you don't: bless. For Wise Women, elders and keepers of the intention, blessing the ritual.</option>
-          <option value="BLUE PINS">BLUE PINS - If you're a man: protect the space. For men standing in protection and reverence for this ritual.</option>
+          <option value="RED PINS">RED PINS — If you bleed: offer.</option>
+          <option value="BLACK PINS">BLACK PINS — If you don’t: bless.</option>
+          <option value="BLUE PINS">BLUE PINS — If you’re a man: protect the space.</option>
         </select>
 
         <div class="row" style="margin-top:14px;">
-          <button class="btn" type="submit">Submit</button>
-          <a class="btn" href="/">Back to map</a>
+          <button class="btn" type="submit">Submit prayer</button>
+          <a class="btn" href="/">Back to the map</a>
         </div>
 
         <div id="msg" class="small" style="margin-top:10px;"></div>
       </form>
     </div>
   </div>
+
+  <script>
+    // pokazuj "ok" po redirect /form?ok=1
+    const p = new URLSearchParams(location.search);
+    if (p.get("ok") === "1") document.getElementById("ok").style.display = "block";
+  </script>
 
   <script src="/form.js"></script>
 </body>
