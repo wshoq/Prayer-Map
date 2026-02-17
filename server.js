@@ -11,7 +11,7 @@ app.use(express.urlencoded({ extended: true }));
 
 /**
  * REQUIRED ENV (Render):
- * - AIRTABLE_TOKEN  (Twój access token)
+ * - AIRTABLE_TOKEN
  * - AIRTABLE_BASE_ID   = appAHi3IJKwxUuxBb
  * - AIRTABLE_TABLE_ID  = tblEU37Z4McYDA86w
  */
@@ -20,9 +20,9 @@ const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN;
 const BASE_ID = process.env.AIRTABLE_BASE_ID || "appAHi3IJKwxUuxBb";
 const TABLE_ID = process.env.AIRTABLE_TABLE_ID || "tblEU37Z4McYDA86w";
 
-// Twoje nazwy kolumn (ze screena) — 1:1:
+// Twoje NAZWY KOLUMN 1:1 (Airtable jest wrażliwy na literówki)
 const FIELD_NAME = "Name";
-const FIELD_LAT  = "Latitude";
+const FIELD_LAT  = "Lattitude";   // <- U Ciebie tak się nazywa (z podwójnym 't')
 const FIELD_LNG  = "Longitude";
 const FIELD_ROLE = "Role";
 
@@ -32,32 +32,33 @@ const ROLE_TO_COLOR = {
   "BLUE PINS": "#1976d2",
 };
 
+// --- parse coords from many Google Maps url formats ---
 function extractLatLngFromUrl(url) {
   try {
     const s = String(url || "").trim();
     let m;
 
-    // 0) /maps/search/lat,+lng
+    // A) /maps/search/lat,+lng  (jak u Ciebie)
     m = s.match(/\/maps\/search\/(-?\d+(?:\.\d+)?),\+(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
-    // 0b) /maps/search/lat,lng
+    // A2) /maps/search/lat,lng
     m = s.match(/\/maps\/search\/(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
-    // 1) @lat,lng
+    // B) @lat,lng
     m = s.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
-    // 2) ?q=lat,lng
+    // C) ?q=lat,lng
     m = s.match(/[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
-    // 3) !3dLAT!4dLNG
+    // D) !3dLAT!4dLNG
     m = s.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
-    // 4) ?ll=lat,lng
+    // E) ?ll=lat,lng
     m = s.match(/[?&]ll=(-?\d+(?:\.\d+)?)(?:%2C|,)(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
@@ -67,7 +68,7 @@ function extractLatLngFromUrl(url) {
   }
 }
 
-// maps.app.goo.gl to shortlink — rozwijamy redirect
+// maps.app.goo.gl shortlink -> final url
 async function resolveFinalUrl(url) {
   const u = String(url || "").trim();
   if (!u) return u;
@@ -99,20 +100,19 @@ async function airtableRequest(method, pathPart, body) {
   return json;
 }
 
-// static
+// --- static ---
 app.use(express.static(path.join(__dirname, "public"), { etag: false, maxAge: "0" }));
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public/index.html")));
 app.get("/form", (req, res) => res.sendFile(path.join(__dirname, "public/form.html")));
 
-// API: get points
+// --- API: points ---
 app.get("/api/points", async (req, res) => {
   try {
     const maxRecords = Math.min(Number(req.query.max || 2000), 5000);
 
-    // Uwaga: sort po createdTime (wbudowane)
     const data = await airtableRequest(
       "GET",
-      `${TABLE_ID}?maxRecords=${encodeURIComponent(String(maxRecords))}&sort%5B0%5D%5Bfield%5D=createdTime&sort%5B0%5D%5Bdirection%5D=desc`,
+      `${TABLE_ID}?maxRecords=${encodeURIComponent(String(maxRecords))}`,
       null
     );
 
@@ -136,7 +136,7 @@ app.get("/api/points", async (req, res) => {
   }
 });
 
-// API: submit
+// --- API: submit ---
 app.post("/api/submit", async (req, res) => {
   try {
     const name = String(req.body.name || "").trim();
@@ -172,7 +172,7 @@ app.post("/api/submit", async (req, res) => {
     };
 
     const created = await airtableRequest("POST", `${TABLE_ID}`, payload);
-    res.json({ ok: true, created });
+    res.json({ ok: true, created, debugFinalUrl: finalUrl, coords });
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
