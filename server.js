@@ -7,22 +7,15 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json({ limit: "200kb" }));
-app.use(express.urlencoded({ extended: true }));
-
-/**
- * REQUIRED ENV (Render):
- * - AIRTABLE_TOKEN
- * - AIRTABLE_BASE_ID   = appAHi3IJKwxUuxBb
- * - AIRTABLE_TABLE_ID  = tblEU37Z4McYDA86w
- */
+app.use(express.urlencoded({ extended: true })); // <- ważne dla form POST
 
 const AIRTABLE_TOKEN = process.env.AIRTABLE_TOKEN;
 const BASE_ID = process.env.AIRTABLE_BASE_ID || "appAHi3IJKwxUuxBb";
 const TABLE_ID = process.env.AIRTABLE_TABLE_ID || "tblEU37Z4McYDA86w";
 
-// Twoje NAZWY KOLUMN 1:1 (Airtable jest wrażliwy na literówki)
+// Airtable field names (dokładnie jak u Ciebie)
 const FIELD_NAME = "Name";
-const FIELD_LAT  = "Lattitude";   // <- U Ciebie tak się nazywa (z podwójnym 't')
+const FIELD_LAT  = "Lattitude";   // tak masz w Airtable
 const FIELD_LNG  = "Longitude";
 const FIELD_ROLE = "Role";
 
@@ -32,33 +25,32 @@ const ROLE_TO_COLOR = {
   "BLUE PINS": "#1976d2",
 };
 
-// --- parse coords from many Google Maps url formats ---
 function extractLatLngFromUrl(url) {
   try {
     const s = String(url || "").trim();
     let m;
 
-    // A) /maps/search/lat,+lng  (jak u Ciebie)
+    // /maps/search/lat,+lng
     m = s.match(/\/maps\/search\/(-?\d+(?:\.\d+)?),\+(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
-    // A2) /maps/search/lat,lng
+    // /maps/search/lat,lng
     m = s.match(/\/maps\/search\/(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
-    // B) @lat,lng
+    // @lat,lng
     m = s.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
-    // C) ?q=lat,lng
+    // ?q=lat,lng
     m = s.match(/[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
-    // D) !3dLAT!4dLNG
+    // !3dLAT!4dLNG
     m = s.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
-    // E) ?ll=lat,lng
+    // ?ll=lat,lng
     m = s.match(/[?&]ll=(-?\d+(?:\.\d+)?)(?:%2C|,)(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
@@ -68,7 +60,6 @@ function extractLatLngFromUrl(url) {
   }
 }
 
-// maps.app.goo.gl shortlink -> final url
 async function resolveFinalUrl(url) {
   const u = String(url || "").trim();
   if (!u) return u;
@@ -77,7 +68,7 @@ async function resolveFinalUrl(url) {
 }
 
 async function airtableRequest(method, pathPart, body) {
-  if (!AIRTABLE_TOKEN) throw new Error("Missing AIRTABLE_TOKEN (set it in Render env)");
+  if (!AIRTABLE_TOKEN) throw new Error("Missing AIRTABLE_TOKEN (Render env)");
 
   const url = `https://api.airtable.com/v0/${BASE_ID}/${pathPart}`;
   const res = await fetch(url, {
@@ -105,16 +96,11 @@ app.use(express.static(path.join(__dirname, "public"), { etag: false, maxAge: "0
 app.get("/", (req, res) => res.sendFile(path.join(__dirname, "public/index.html")));
 app.get("/form", (req, res) => res.sendFile(path.join(__dirname, "public/form.html")));
 
-// --- API: points ---
+// --- API points ---
 app.get("/api/points", async (req, res) => {
   try {
     const maxRecords = Math.min(Number(req.query.max || 2000), 5000);
-
-    const data = await airtableRequest(
-      "GET",
-      `${TABLE_ID}?maxRecords=${encodeURIComponent(String(maxRecords))}`,
-      null
-    );
+    const data = await airtableRequest("GET", `${TABLE_ID}?maxRecords=${encodeURIComponent(String(maxRecords))}`, null);
 
     const points = (data.records || []).map(r => {
       const f = r.fields || {};
@@ -136,47 +122,71 @@ app.get("/api/points", async (req, res) => {
   }
 });
 
-// --- API: submit ---
+// wspólna logika zapisu (dla /api/submit i /submit)
+async function handleSubmitCore(body) {
+  const name = String(body.name || "").trim();
+  const link = String(body.link || "").trim();
+  const role = String(body.role || "").trim();
+
+  if (!name) return { ok: false, status: 400, error: "Missing name" };
+  if (!link) return { ok: false, status: 400, error: "Missing google maps link" };
+  if (!ROLE_TO_COLOR[role]) return { ok: false, status: 400, error: "Invalid role" };
+
+  const finalUrl = await resolveFinalUrl(link);
+  const coords = extractLatLngFromUrl(finalUrl) || extractLatLngFromUrl(link);
+
+  if (!coords || !Number.isFinite(coords.lat) || !Number.isFinite(coords.lng)) {
+    return {
+      ok: false,
+      status: 400,
+      error: "Could not extract lat/lng from the link. Use Google Maps → Share and paste a link that contains coordinates.",
+      debugFinalUrl: finalUrl
+    };
+  }
+
+  const payload = {
+    records: [
+      {
+        fields: {
+          [FIELD_NAME]: name,
+          [FIELD_ROLE]: role,
+          [FIELD_LAT]: String(coords.lat),
+          [FIELD_LNG]: String(coords.lng),
+        }
+      }
+    ]
+  };
+
+  const created = await airtableRequest("POST", `${TABLE_ID}`, payload);
+  return { ok: true, created, coords };
+}
+
+// AJAX submit (JSON)
 app.post("/api/submit", async (req, res) => {
   try {
-    const name = String(req.body.name || "").trim();
-    const link = String(req.body.link || "").trim();
-    const role = String(req.body.role || "").trim();
-
-    if (!name) return res.status(400).json({ ok: false, error: "Missing name" });
-    if (!link) return res.status(400).json({ ok: false, error: "Missing google maps link" });
-    if (!ROLE_TO_COLOR[role]) return res.status(400).json({ ok: false, error: "Invalid role" });
-
-    const finalUrl = await resolveFinalUrl(link);
-    const coords = extractLatLngFromUrl(finalUrl) || extractLatLngFromUrl(link);
-
-    if (!coords || !Number.isFinite(coords.lat) || !Number.isFinite(coords.lng)) {
-      return res.status(400).json({
-        ok: false,
-        error: "Could not extract lat/lng from the link. Use Google Maps → Share and paste a link that contains coordinates.",
-        debugFinalUrl: finalUrl
-      });
-    }
-
-    const payload = {
-      records: [
-        {
-          fields: {
-            [FIELD_NAME]: name,
-            [FIELD_ROLE]: role,
-            [FIELD_LAT]: String(coords.lat), // short text
-            [FIELD_LNG]: String(coords.lng), // short text
-          }
-        }
-      ]
-    };
-
-    const created = await airtableRequest("POST", `${TABLE_ID}`, payload);
-    res.json({ ok: true, created, debugFinalUrl: finalUrl, coords });
+    const out = await handleSubmitCore(req.body);
+    if (!out.ok) return res.status(out.status || 400).json(out);
+    res.json(out);
   } catch (e) {
     res.status(500).json({ ok: false, error: String(e.message || e) });
   }
 });
 
+// Form fallback submit (urlencoded) -> redirect
+app.post("/submit", async (req, res) => {
+  try {
+    const out = await handleSubmitCore(req.body);
+    if (!out.ok) {
+      // wróć na /form z błędem w query (prosto)
+      const msg = encodeURIComponent(out.error || "Submit failed");
+      return res.redirect(`/form?err=${msg}`);
+    }
+    return res.redirect("/form?ok=1");
+  } catch (e) {
+    const msg = encodeURIComponent(String(e.message || e));
+    return res.redirect(`/form?err=${msg}`);
+  }
+});
+
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`praymap-airtable on :${PORT}`));
+app.listen(PORT, () => console.log(`the-living-prayer-map on :${PORT}`));
