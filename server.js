@@ -35,20 +35,29 @@ const ROLE_TO_COLOR = {
 function extractLatLngFromUrl(url) {
   try {
     const s = String(url || "").trim();
+    let m;
 
-    // @lat,lng
-    let m = s.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+    // 0) /maps/search/lat,+lng
+    m = s.match(/\/maps\/search\/(-?\d+(?:\.\d+)?),\+(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
-    // ?q=lat,lng
+    // 0b) /maps/search/lat,lng
+    m = s.match(/\/maps\/search\/(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
+    if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
+
+    // 1) @lat,lng
+    m = s.match(/@(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
+    if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
+
+    // 2) ?q=lat,lng
     m = s.match(/[?&]q=(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
-    // !3dLAT!4dLNG
+    // 3) !3dLAT!4dLNG
     m = s.match(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
-    // ?ll=lat,lng
+    // 4) ?ll=lat,lng
     m = s.match(/[?&]ll=(-?\d+(?:\.\d+)?)(?:%2C|,)(-?\d+(?:\.\d+)?)/);
     if (m) return { lat: Number(m[1]), lng: Number(m[2]) };
 
