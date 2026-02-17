@@ -3,23 +3,37 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>PrayMap</title>
+
+  <title>The Living Prayer Map</title>
 
   <link rel="stylesheet" href="/style.css" />
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    crossorigin=""
+  />
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    crossorigin=""
+  ></script>
 </head>
 
 <body>
   <div class="panel">
-    <div class="row"><strong>PrayMap</strong></div>
+    <div class="row">
+      <strong>The Living Prayer Map</strong>
+    </div>
+
     <div class="muted" id="status">Loading…</div>
-    <div class="row muted">Auto-refresh: <span id="refresh">15</span>s</div>
+
+    <div class="row muted">
+      Auto-refresh: <span id="refresh">15</span>s
+    </div>
 
     <div class="row" style="margin-top:8px; gap:8px; flex-wrap:wrap;">
       <button class="btn" id="fitBtn">Fit to visible</button>
       <button class="btn" id="reloadBtn">Reload</button>
-      <a class="btn" href="/form">Open form</a>
+      <a class="btn" href="/form">Add your prayer</a>
     </div>
 
     <div class="layers" id="layers"></div>
