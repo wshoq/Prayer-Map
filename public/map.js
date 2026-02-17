@@ -9,13 +9,20 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
 
 const ROLE_META = {
   "RED PINS":  { color:"#d32f2f", label:"RED PINS — If you bleed: offer." },
-  "BLACK PINS":{ color:"#000000", label:"BLACK PINS — If you don't: bless." },
-  "BLUE PINS": { color:"#1976d2", label:"BLUE PINS — If you're a man: protect." }
+  "BLACK PINS":{ color:"#000000", label:"BLACK PINS — If you don’t: bless." },
+  "BLUE PINS": { color:"#1976d2", label:"BLUE PINS — If you’re a man: protect." }
 };
 
 const layerGroups = new Map();    // role -> layerGroup
 const layerEnabled = new Map();   // role -> bool
 const markersByRole = new Map();  // role -> [marker]
+
+// === NEW: fit only once (or until user moves map) ===
+let didInitialFit = false;
+let userInteracted = false;
+
+// Jeśli user zacznie poruszać mapą (drag/zoom), nie auto-fitujemy już nigdy
+map.on("dragstart zoomstart", () => { userInteracted = true; });
 
 function esc(s){
   return String(s).replace(/[&<>"']/g, c => ({
@@ -34,50 +41,6 @@ function ensureRole(role){
     layerGroups.set(role, L.layerGroup().addTo(map));
     layerEnabled.set(role, true);
     markersByRole.set(role, []);
-    renderControls();
-  }
-}
-
-function renderControls(){
-  const el = document.getElementById("layers");
-  el.innerHTML = "";
-
-  const order = ["RED PINS","BLACK PINS","BLUE PINS"];
-  const roles = Array.from(layerGroups.keys()).sort((a,b)=>order.indexOf(a)-order.indexOf(b));
-
-  for (const role of roles) {
-    const enabled = !!layerEnabled.get(role);
-    const color = ROLE_META[role]?.color || "#000";
-    const labelText = ROLE_META[role]?.label || role;
-
-    const row = document.createElement("label");
-    row.className = "row";
-    row.style.margin = "0";
-
-    const cb = document.createElement("input");
-    cb.type = "checkbox";
-    cb.checked = enabled;
-    cb.onchange = () => {
-      layerEnabled.set(role, cb.checked);
-      const g = layerGroups.get(role);
-      if (cb.checked) g.addTo(map);
-      else map.removeLayer(g);
-      fitToVisible();
-    };
-
-    const dot = document.createElement("span");
-    dot.className = "dot";
-    dot.style.background = color;
-
-    const span = document.createElement("span");
-    span.className = "muted";
-    span.style.opacity = "1";
-    span.textContent = labelText;
-
-    row.appendChild(cb);
-    row.appendChild(dot);
-    row.appendChild(span);
-    el.appendChild(row);
   }
 }
 
@@ -124,26 +87,100 @@ function fitToVisible(){
   if (any) map.fitBounds(bounds.pad(0.2));
 }
 
+// === NEW: counts per role ===
+function getCount(role){
+  return (markersByRole.get(role) || []).length;
+}
+
+function renderControls(){
+  const el = document.getElementById("layers");
+  el.innerHTML = "";
+
+  const order = ["RED PINS","BLACK PINS","BLUE PINS"];
+  const roles = Array.from(layerGroups.keys()).sort((a,b)=>order.indexOf(a)-order.indexOf(b));
+
+  for (const role of roles) {
+    const enabled = !!layerEnabled.get(role);
+    const color = ROLE_META[role]?.color || "#000";
+    const labelText = ROLE_META[role]?.label || role;
+    const count = getCount(role);
+
+    const row = document.createElement("label");
+    row.className = "row";
+    row.style.margin = "0";
+    row.style.justifyContent = "space-between";
+
+    const left = document.createElement("div");
+    left.className = "row";
+    left.style.margin = "0";
+    left.style.gap = "8px";
+
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = enabled;
+    cb.onchange = () => {
+      layerEnabled.set(role, cb.checked);
+      const g = layerGroups.get(role);
+      if (cb.checked) g.addTo(map);
+      else map.removeLayer(g);
+      // fit ręcznie tylko jeśli user kliknie Fit
+    };
+
+    const dot = document.createElement("span");
+    dot.className = "dot";
+    dot.style.background = color;
+
+    const span = document.createElement("span");
+    span.className = "muted";
+    span.style.opacity = "1";
+    span.textContent = labelText;
+
+    const right = document.createElement("span");
+    right.className = "muted";
+    right.style.opacity = "0.9";
+    right.textContent = String(count);
+
+    left.appendChild(cb);
+    left.appendChild(dot);
+    left.appendChild(span);
+
+    row.appendChild(left);
+    row.appendChild(right);
+
+    el.appendChild(row);
+  }
+}
+
 async function refresh(){
   const status = document.getElementById("status");
+
   try {
     const res = await fetch("/api/points?max=5000", { cache: "no-store" });
     const data = await res.json();
     if (!data || !data.ok) throw new Error(data?.error || "Bad response");
 
     clearAll();
+
     for (const p of data.points) addPoint(p);
+
+    // odśwież warstwy (zlicza)
     renderControls();
 
     status.textContent = `✅ Points: ${data.count} · ${new Date().toLocaleTimeString()}`;
-    fitToVisible();
+
+    // === CHANGE: fit tylko raz, na start, i tylko jeśli user nie ruszał mapy ===
+    if (!didInitialFit && !userInteracted) {
+      fitToVisible();
+      didInitialFit = true;
+    }
+
   } catch (e) {
     status.textContent = `⚠️ ${e.message}`;
   }
 }
 
-document.getElementById("fitBtn").onclick = fitToVisible;
-document.getElementById("reloadBtn").onclick = refresh;
+document.getElementById("fitBtn").onclick = () => fitToVisible();
+document.getElementById("reloadBtn").onclick = () => refresh();
 
 refresh();
 setInterval(refresh, REFRESH_MS);
